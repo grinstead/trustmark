@@ -1736,13 +1736,14 @@ dependencies = [
 
 [[package]]
 name = "trustmark"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "criterion",
  "fast_image_resize",
  "image",
  "ndarray",
  "ort",
+ "ort-sys",
  "thiserror",
 ]
 
