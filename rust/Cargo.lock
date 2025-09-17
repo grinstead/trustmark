@@ -1736,7 +1736,7 @@ dependencies = [
 
 [[package]]
 name = "trustmark"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "criterion",
  "fast_image_resize",
