@@ -45,6 +45,8 @@ MODEL_CHECKSUMS['decoder_Q.ckpt']="4ced90e9cfe13e3295ad082887fe9187"
 MODEL_CHECKSUMS['encoder_Q.ckpt']="700328b8754db934b2f6cb5e5185d81f"
 MODEL_CHECKSUMS['trustmark_rm_Q.yaml']="8476bcd4092abf302272868f3b4c2e38"
 MODEL_CHECKSUMS['trustmark_rm_Q.ckpt']="760337a5596e665aed2ab5c49aa5284f"
+MODEL_CHECKSUMS['trustmark_bbox_Q.yaml']="749b0d62106f8f6648e6f781c3143105"
+MODEL_CHECKSUMS['trustmark_bbox_Q.ckpt']="9d15428a33e15140ea16aa378416d304"
 
 # B variant is very similar to Q variant, but had slightly higher robustness vs. quality it is included
 # here as presented in the original 2023 paper for purposes of reproducing the results
@@ -61,11 +63,11 @@ MODEL_CHECKSUMS['decoder_P.ckpt']="9450972bc0c3c217cb7b8220dd2f7a3c"
 MODEL_CHECKSUMS['encoder_P.ckpt']="0a18f6de6d57c6ef7dda30ce6154a775"
 MODEL_CHECKSUMS['trustmark_rm_P.yaml']="654cabd3ac8339397fbc611ca7464780"
 MODEL_CHECKSUMS['trustmark_rm_P.ckpt']="8b8f4715ea474327921ee9d0f46d2c3f"
-
+MODEL_CHECKSUMS['trustmark_bbox_P.yaml']="749b0d62106f8f6648e6f781c3143105"
+MODEL_CHECKSUMS['trustmark_bbox_P.ckpt']="65863e44eaccb58b147f119371723200"
 
 CONCENTRATE_WM_REGION = 1.0
 ASPECT_RATIO_LIM = 2.0
-FALLBACK_ALL_SCHEMAS = True
 FEATHERING_RESIDUAL=0.01
 
 class TrustMark():
@@ -77,19 +79,8 @@ class TrustMark():
        BCH_4=2
        BCH_5=1
 
-    def __init__(self, use_ECC=True, verbose=True, secret_len=100, device='', model_type='Q', encoding_type=Encoding.BCH_5, concentrate_wm_region=CONCENTRATE_WM_REGION):
-        """ Initializes the TrustMark watermark encoder/decoder/remover module
-
-        Parameters (default listed first)
-        ---------------------------------
-
-        use_ECC : bool
-            [True] will use BCH error correction on the payload, reducing payload size (default)
-            [False] will disable error correction, increasing payload size
-        verbose : bool
-            [True] will output status messages during use (default)
-            [False] will run silent except for error messages
-        """
+    def __init__(self, use_ECC=True, verbose=True, secret_len=100, device='', model_type='Q', encoding_type=Encoding.BCH_5, concentrate_wm_region=CONCENTRATE_WM_REGION, loadRemover=True, loadBBoxDetector=False):
+        # Initializes the TrustMark watermark encoder/decoder/remover/detector module
 
         super(TrustMark, self).__init__()
 
@@ -110,7 +101,9 @@ class TrustMark():
                    'config-rm' : os.path.join(pathlib.Path(__file__).parent.resolve(),f'models/trustmark_rm_{self.model_type}.yaml'), 
                    'decoder': os.path.join(pathlib.Path(__file__).parent.resolve(),f'models/decoder_{self.model_type}.ckpt'), 
                    'remover': os.path.join(pathlib.Path(__file__).parent.resolve(),f'models/trustmark_rm_{self.model_type}.ckpt'),
-                   'encoder': os.path.join(pathlib.Path(__file__).parent.resolve(),f'models/encoder_{self.model_type}.ckpt')}
+                   'encoder': os.path.join(pathlib.Path(__file__).parent.resolve(),f'models/encoder_{self.model_type}.ckpt'),
+                   'detector': os.path.join(pathlib.Path(__file__).parent.resolve(),f'models/trustmark_bbox_{self.model_type}.ckpt'),
+                   'config-detector': os.path.join(pathlib.Path(__file__).parent.resolve(),f'models/trustmark_bbox_{self.model_type}.yaml')}
 
         self.use_ECC = use_ECC
         self.secret_len = secret_len
@@ -127,10 +120,16 @@ class TrustMark():
            self.model_resolution_enc = 256
            self.model_resolution_dec = 245
         self.model_resolution_remove = 256
+        self.model_resolution_max_detect = 1600
         
         self.decoder = self.load_model(locations['config'], locations['decoder'], self.device, secret_len, part='decoder')
         self.encoder = self.load_model(locations['config'], locations['encoder'], self.device, secret_len, part='encoder')
-        self.removal = self.load_model(locations['config-rm'], locations['remover'], self.device, secret_len, part='remover')
+        self.removal = None
+        self.loadBBoxDetector = None
+        if loadRemover:
+          self.removal = self.load_model(locations['config-rm'], locations['remover'], self.device, secret_len, part='remover')
+        if loadBBoxDetector:
+          self.detector = self.load_model(locations['config-detector'], locations['detector'], self.device, secret_len, part='detector')
 
 
     def schemaCapacity(self):
@@ -152,9 +151,15 @@ class TrustMark():
             urllib.request.urlretrieve(urld, filename=filename)
 
     def load_model(self, config_path, weight_path, device, secret_len, part='all'):
-        assert part in ['all', 'encoder', 'decoder', 'remover']
-        self.check_and_download(config_path)
-        self.check_and_download(weight_path)
+        assert part in ['all', 'encoder', 'decoder', 'remover', 'detector']
+
+        try:
+            self.check_and_download(config_path)
+            self.check_and_download(weight_path)
+        except Exception as e:
+            print(f'Error downloading model file. {config_path} {weight_path}'+str(e))
+            return None
+                   
         config = OmegaConf.load(config_path).model
         if part == 'encoder':
             # replace all other components with identity
@@ -171,6 +176,13 @@ class TrustMark():
 
         elif part == 'remover':
             config.params.is_train = False  # inference mode, only load denoise module
+
+        elif part == 'detector': #detector part has the decoder and box prediction
+            # replace all other components with identity
+            config.params.secret_encoder_config.target = 'trustmark.model.Identity'
+            config.params.discriminator_config.target = 'trustmark.model.Identity'
+            config.params.loss_config.target = 'trustmark.model.Identity'
+            config.params.noise_config.target = 'trustmark.model.Identity'
     
         model = instantiate_from_config(config)
         state_dict = torch.load(weight_path, map_location=torch.device('cpu'))
@@ -334,46 +346,103 @@ class TrustMark():
             )
     
 
+    @torch.no_grad()
+    def localize(self, in_stego_image, return_all: bool = False):
 
-    def decode(self, in_stego_image, MODE='text'):
+        if self.detector is None:
+            raise RuntimeError("BBox detector model is not loaded. "
+                               "Initialize TrustMark passing construtor loadBBoxDetector=True.")
+
+        max_edge = self.model_resolution_max_detect
+        w, h = in_stego_image.size
+        if max(w, h) > max_edge:
+            scale = max_edge / max(w, h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            stego = in_stego_image.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            sw, sh = new_w, new_h
+        else:
+            stego = in_stego_image
+            sw, sh = w, h
+
+        ful_im = [transforms.ToTensor()(stego).to(self.detector.device) * 2.0 - 1.0]
+        preds, _ = self.detector.yolo(ful_im)
+
+        boxes_list = preds.get('boxes', [])
+        scores_list = preds.get('scores', [])
+
+        if not boxes_list or not scores_list:
+            return None
+
+        boxes = boxes_list[0]
+        scores = scores_list[0]
+        if boxes.numel() == 0 or scores.numel() == 0:
+            return None
+
+        def normalize_box(box, sw, sh):
+            x1, y1, x2, y2 = box.detach().float().cpu().tolist()
+            sw = max(1, sw)
+            sh = max(1, sh)
+            nx1 = max(0.0, min(1.0, x1 / sw))
+            ny1 = max(0.0, min(1.0, y1 / sh))
+            nx2 = max(0.0, min(1.0, x2 / sw))
+            ny2 = max(0.0, min(1.0, y2 / sh))
+            return [nx1, ny1, nx2, ny2]
+
+        if return_all:
+            return [normalize_box(b, sw, sh) for b in boxes]
+
+        # pick highest score
+        top_idx = int(scores.argmax().item())
+        return normalize_box(boxes[top_idx], sw, sh)
+
+
+
+    @torch.no_grad()
+    def decode(self, in_stego_image, MODE='text', DETECTFIRST=False):
         # Inputs
         # stego_image: PIL image
         # Outputs: secret numpy array (1, secret_len)
-        stego_image = self.get_the_image_for_processing(in_stego_image)
+        if DETECTFIRST:
+           # run localization to get most likely box(es)
+           boxes_pred = self.localize(in_stego_image, return_all=True)
+           if boxes_pred is None:
+               return '', False, -1
+           for bbox in boxes_pred:
+              # bbox is normalized [x1, y1, x2, y2]
+              w, h = in_stego_image.size
+              x1 = int(bbox[0] * w)
+              y1 = int(bbox[1] * h)
+              x2 = int(bbox[2] * w)
+              y2 = int(bbox[3] * h)
+              x1 = max(0, min(x1, w - 1))
+              y1 = max(0, min(y1, h - 1))
+              x2 = max(x1 + 1, min(x2, w))
+              y2 = max(y1 + 1, min(y2, h))
+              stego_image = in_stego_image.crop((x1, y1, x2, y2))     
+              secret_pred, detected, version = self.subimage_decode(stego_image,MODE)
+              if detected:
+                return secret_pred, detected, version
+           # no boxes resulted in detection
+           return '', False, -1
+        else:
+           stego_image = self.get_the_image_for_processing(in_stego_image)
+           return self.subimage_decode(stego_image,MODE)
+
+    @torch.no_grad()
+    def subimage_decode(self, stego_image, MODE):
         stego_image = stego_image.resize((self.model_resolution_dec,self.model_resolution_dec), Image.BILINEAR)
         stego = transforms.ToTensor()(stego_image).unsqueeze(0).to(self.decoder.device) * 2.0 - 1.0 # (1,3,modelres,modelres) in range [-1, 1]
         with torch.no_grad():
             secret_binaryarray = (self.decoder.decoder(stego) > 0).cpu().numpy()  # (1, secret_len)
         if self.use_ECC:
             secret_pred, detected, version = self.ecc.decode_bitstream(secret_binaryarray, MODE)[0]
-            if not detected and FALLBACK_ALL_SCHEMAS:
-                # last ditch attempt to recover a possible corruption of the version bits by trying all other schema types
-                modeset= [x for x in range(0,3) if x not in [version]] # not bch_3   
-                for m in modeset:
-                     if m==0:
-                        secret_binaryarray[0][-2]=False
-                        secret_binaryarray[0][-1]=False
-                     if m==1:
-                        secret_binaryarray[0][-2]=False
-                        secret_binaryarray[0][-1]=True
-                     if m==2:
-                        secret_binaryarray[0][-2]=True
-                        secret_binaryarray[0][-1]=False
-                     if m==3: 
-                        secret_binaryarray[0][-2]=True  
-                        secret_binaryarray[0][-1]=True
-                     secret_pred, detected, version = self.ecc.decode_bitstream(secret_binaryarray, MODE)[0]
-                     if (detected):
-                          return secret_pred, detected, version   
-                     else:
-                          return '', False, -1
-            else:
-                return secret_pred, detected, version
+            return secret_pred, detected, version
         else:
             assert len(secret_binaryarray.shape)==2
             secret_pred = ''.join(str(int(x)) for x in secret_binaryarray[0])
             return secret_pred, True, -1
          
+    @torch.no_grad()
     def encode(self, in_cover_image, string_secret, MODE='text', WM_STRENGTH=1.0, WM_MERGE='bilinear'):
         # Inputs
         #   cover_image: PIL image
@@ -420,7 +489,11 @@ class TrustMark():
 
     @torch.no_grad()
     def remove_watermark(self, in_cover_image, WM_STRENGTH=1.0, WM_MERGE='bilinear'):
-        """Remove watermark from stego image"""
+
+        if self.removal is None:
+            raise ModelNotLoadedError("Watermark remover model is not loaded. "
+                                      "Initialize TrustMark passing the constructor loadRemover=True before calling remove_watermark().")
+
         stego = self.get_the_image_for_processing(in_cover_image)
         W, H = stego.size
         if self.model_type == 'P':

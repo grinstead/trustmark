@@ -2,6 +2,8 @@
 
 This repository contains the official, open source implementation of TrustMark watermarking for the Content Authenticity Initiative (CAI) as described in [**TrustMark - Universal Watermarking for Arbitrary Resolution Images**](https://arxiv.org/abs/2311.18297) (`arXiv:2311.18297`) by [Tu Bui](https://www.surrey.ac.uk/people/tu-bui)[^1], [Shruti Agarwal](https://research.adobe.com/person/shruti-agarwal/)[^2], and [John Collomosse](https://www.collomosse.com)[^1] [^2].
 
+and later published at (https://iccv.thecvf.com/virtual/2025/poster/1714)('ICCV 2025') as [**TrustMark: Robust Watermarking and Watermark Removal for Arbitrary Resolution Images”**].
+
 [^1]: [DECaDE](https://decade.ac.uk/) Centre for the Decentralized Digital Economy, University of Surrey, UK.
 
 [^2]: [Adobe Research](https://research.adobe.com/), San Jose, CA.
@@ -10,9 +12,12 @@ This repository contains the official, open source implementation of TrustMark w
 
 This repository contains the following directories:
 
-- `/python`: Python implementation of TrustMark for encoding, decoding and removing image watermarks (using PyTorch). For information on configuring TrustMark in Python, see [Configuring TrustMark](CONFIG.md). 
-- `/js`: Javascript implementation of TrustMark decoding of image watermarks (using ONNX).  For more information, see [TrustMark - JavaScript implementation](../js/README.md).
-- `/c2pa`: Python example of how to indicate the presence of a TrustMark watermark in a C2PA manifest. For more information, see [Using TrustMark with C2PA](../c2pa/README.md).
+This repository contains the following directories:
+
+- `/python`: Python implementation of TrustMark for encoding, decoding and removing image watermarks (using PyTorch). For information on configuring TrustMark in Python, see [Configuring TrustMark](python/CONFIG.md).
+- `/js`: Javascript implementation of TrustMark decoding of image watermarks (using ONNX).  For more information, see [TrustMark - JavaScript implementation](js/README.md).
+- `/rust`: Rust implementation of TrustMark. for more information, see [TrustMark — Rust implementation](rust/README.md).
+- `/c2pa`: Python example of how to indicate the presence of a TrustMark watermark in a C2PA manifest. For more information, see [Using TrustMark with C2PA](c2pa/README.md).
 
 Model files (**ckpt** PyTorch file for Python and **onnx** ONNX file for JavaScript) are not packaged in this repository due to their size, but are downloaded upon first use.  See the code for [URLs and md5 hashes](https://github.com/adobe/trustmark/blob/4ef0dde4abd84d1c6873e7c5024482f849db2c73/python/trustmark/trustmark.py#L30) for a direct download link.
 
@@ -125,7 +130,7 @@ For more details and information on configuring the encoding mode in Python, see
 
 ## Citation
 
-If you find this work useful, please cite the repository and/or TrustMark paper as follows:
+If you find this work useful, please give us a star ⭐ and cite the repository and/or TrustMark paper as follows:
 
 ```
 @article{trustmark,

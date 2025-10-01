@@ -378,6 +378,33 @@ class MSResNet(nn.Module):
             x = self.downsample(x)
         return outputs
 
+class FasterRCNN2(nn.Module):
+
+    def __init__(
+        self,
+        in_channels,
+        # transform parameters
+        secret_len=100,
+        ckpt_path = '__none__'
+    ):
+        super().__init__()
+
+        self.sec_logits = nn.Linear(in_channels, secret_len)
+        self.box_logits = nn.Linear(in_channels, 4)
+
+        if ckpt_path != '__none__':
+            self.init_from_ckpt(ckpt_path)
+        
+
+    def forward(self, x):
+
+        x = x.squeeze(-1).squeeze(-1)
+
+        box_pred = self.box_logits(x)
+        sec_pred = self.sec_logits(x)
+        
+        return sec_pred, box_pred
+
 
 class SecretDecoder(nn.Module):
     def __init__(self, arch='resnet18', resolution=224, secret_len=100):
@@ -392,9 +419,16 @@ class SecretDecoder(nn.Module):
             self.decoder = torchvision.models.resnet50()
 #            self.decoder = torchvision.models.resnet50(pretrained=True, progress=False)
             self.decoder.fc = nn.Linear(self.decoder.fc.in_features, secret_len)
+        elif arch == 'resnet101':
+            self.decoder = torchvision.models.resnet101()
+#            self.decoder = torchvision.models.resnet50(pretrained=True, progress=False)
+            self.decoder.fc = nn.Linear(self.decoder.fc.in_features, secret_len)
         elif arch == 'resnext50':
             self.decoder = torchvision.models.resnext50_32x4d(weights='ResNet50_Weights.IMAGENET1K_V1', progress=False)
             self.decoder.fc = nn.Linear(self.decoder.fc.in_features, secret_len)
+        elif arch == 'fasterRCNN2':
+            self.decoder = torchvision.models.resnet50()
+            self.decoder.fc = FasterRCNN2(self.decoder.fc.in_features, secret_len)
         elif arch == 'googlenet':
             self.decoder = torchvision.models.googlenet(pretrained=True, progress=False)
             self.decoder.fc = nn.Linear(self.decoder.fc.in_features, secret_len)
@@ -421,7 +455,7 @@ class SecretDecoder(nn.Module):
             raise ValueError('Unknown architecture')
         
     def forward(self, image, **kwargs):
-        if self.arch in ['resnet50', 'resnet18'] and min(image.shape[-2:]) > self.resolution:
+        if self.arch in ['resnet50', 'resnet18', 'resnet101', 'fasterRCNN2'] and min(image.shape[-2:]) > self.resolution:
             image = thf.interpolate(image, size=(self.resolution, self.resolution), mode='bilinear', align_corners=False)
         x = self.decoder(image)
         return x

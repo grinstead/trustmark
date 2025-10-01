@@ -1,6 +1,10 @@
 # TrustMark
 
-This repository contains the official, open source implementation of TrustMark watermarking for the Content Authenticity Initiative (CAI) as described in [**TrustMark - Universal Watermarking for Arbitrary Resolution Images**](https://arxiv.org/abs/2311.18297) (`arXiv:2311.18297`) by [Tu Bui](https://www.surrey.ac.uk/people/tu-bui)[^1], [Shruti Agarwal](https://research.adobe.com/person/shruti-agarwal/)[^2], and [John Collomosse](https://www.collomosse.com)[^1] [^2].
+This repository contains the official, open source implementation of TrustMark watermarking for the Content Authenticity Initiative (CAI) as described in:
+
+[**TrustMark - Universal Watermarking for Arbitrary Resolution Images**](https://arxiv.org/abs/2311.18297) (`arXiv:2311.18297`) by [Tu Bui](https://www.surrey.ac.uk/people/tu-bui)[^1], [Shruti Agarwal](https://research.adobe.com/person/shruti-agarwal/)[^2], and [John Collomosse](https://www.collomosse.com)[^1] [^2].
+
+and later published at (https://iccv.thecvf.com/virtual/2025/poster/1714)('ICCV 2025') as [**TrustMark: Robust Watermarking and Watermark Removal for Arbitrary Resolution Images”**].
 
 [^1]: [DECaDE](https://decade.ac.uk/) Centre for the Decentralized Digital Economy, University of Surrey, UK.
 
@@ -127,10 +131,19 @@ For more details and information on configuring the encoding mode in Python, see
 
 ## Citation
 
-If you find this work useful, please cite the repository and/or TrustMark paper as follows:
-
+If you find this work useful, please give us a star ⭐ and cite the repository and/or TrustMark paper, preferrably as follows:
 ```
-@article{trustmark,
+@inproceedings{Trustmark-ICCV-2025,
+  title = {TrustMark: Robust Watermarking and Watermark Removal for Arbitrary Resolution Images},
+  author={Bui, Tu and Agarwal, Shruti and Collomosse, John},
+  booktitle = {IEEE International Conference on Computer Vision (ICCV)},
+  year = {2025},
+  month = oct
+}
+```
+or cite the earlier ArXiv version:
+```
+@article{Trustmark-ArXiv-2023,
 title={Trustmark: Universal Watermarking for Arbitrary Resolution Images},
 author={Bui, Tu and Agarwal, Shruti and Collomosse, John},
 journal = {ArXiv e-prints},
