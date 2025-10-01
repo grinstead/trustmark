@@ -16,6 +16,16 @@ Text mode watermarks and watermark removal are not implemented.
 
 Open an issue if there's something in the Python version that want added to this crate!
 
+## Platform Support
+
+This crate uses the [ort](https://ort.pyke.io) crate as an ONNX runtime. As such, it can only be used on platforms supported by that crate. See [the documentation](https://ort.pyke.io/setup/platforms) for supported platforms.
+
+In particular, the ONNX runtime requires either:
+
+* A recent version of Windows 10/11 & Visual Studio 2022 (≥ 17.11)
+* glibc ≥ 2.35 & libstdc++ >= 12 (Ubuntu ≥ 22.04, Debian ≥ 12 ‘Bookworm’)
+* macOS ≥ 10.15
+
 ## Quick start
 
 ### Download models
