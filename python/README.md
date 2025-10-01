@@ -1,8 +1,10 @@
 # TrustMark
 
-This repository contains the official, open source implementation of TrustMark watermarking for the Content Authenticity Initiative (CAI) as described in [**TrustMark - Universal Watermarking for Arbitrary Resolution Images**](https://arxiv.org/abs/2311.18297) (`arXiv:2311.18297`) by [Tu Bui](https://www.surrey.ac.uk/people/tu-bui)[^1], [Shruti Agarwal](https://research.adobe.com/person/shruti-agarwal/)[^2], and [John Collomosse](https://www.collomosse.com)[^1] [^2].
+This repository contains the official, open source implementation of TrustMark watermarking for the Content Authenticity Initiative (CAI) as described in:
 
-and later published at (https://iccv.thecvf.com/virtual/2025/poster/1714)('ICCV 2025') as [**TrustMark: Robust Watermarking and Watermark Removal for Arbitrary Resolution Images”**].
+[**TrustMark - Universal Watermarking for Arbitrary Resolution Images**](https://arxiv.org/abs/2311.18297) (`arXiv:2311.18297`) by [Tu Bui](https://www.surrey.ac.uk/people/tu-bui)[^1], [Shruti Agarwal](https://research.adobe.com/person/shruti-agarwal/)[^2], and [John Collomosse](https://www.collomosse.com)[^1] [^2].
+
+and later published at [ICCV 2025](https://iccv.thecvf.com/virtual/2025/poster/1714) as [**TrustMark: Robust Watermarking and Watermark Removal for Arbitrary Resolution Images**](https://collomosse.com/pubs/Bui-ICCV-2025.pdf).
 
 [^1]: [DECaDE](https://decade.ac.uk/) Centre for the Decentralized Digital Economy, University of Surrey, UK.
 
@@ -12,9 +14,7 @@ and later published at (https://iccv.thecvf.com/virtual/2025/poster/1714)('ICCV 
 
 This repository contains the following directories:
 
-This repository contains the following directories:
-
-- `/python`: Python implementation of TrustMark for encoding, decoding and removing image watermarks (using PyTorch). For information on configuring TrustMark in Python, see [Configuring TrustMark](python/CONFIG.md).
+- `/python`: Python implementation of TrustMark for encoding, decoding and removing image watermarks (using PyTorch). For information on configuring TrustMark in Python, see [Configuring TrustMark](python/CONFIG.md). 
 - `/js`: Javascript implementation of TrustMark decoding of image watermarks (using ONNX).  For more information, see [TrustMark - JavaScript implementation](js/README.md).
 - `/rust`: Rust implementation of TrustMark. for more information, see [TrustMark — Rust implementation](rust/README.md).
 - `/c2pa`: Python example of how to indicate the presence of a TrustMark watermark in a C2PA manifest. For more information, see [Using TrustMark with C2PA](c2pa/README.md).
@@ -22,8 +22,9 @@ This repository contains the following directories:
 Model files (**ckpt** PyTorch file for Python and **onnx** ONNX file for JavaScript) are not packaged in this repository due to their size, but are downloaded upon first use.  See the code for [URLs and md5 hashes](https://github.com/adobe/trustmark/blob/4ef0dde4abd84d1c6873e7c5024482f849db2c73/python/trustmark/trustmark.py#L30) for a direct download link.
 
 More information:
-- For answers to common questions, see the [FAQ](../FAQ.md).
-- For information on configuring TrustMark in Python, see [Configuring TrustMark](CONFIG.md).
+
+- For answers to common questions, see the [FAQ](FAQ.md).
+- For information on configuring TrustMark in Python, see [Configuring TrustMark](python/CONFIG.md).
 
 ## Installation
 
@@ -126,14 +127,23 @@ In payload encoding, the version bits comprise two reserved (unused) bits, and t
 - 2: BCH_4
 - 3: BCH_3
 
-For more details and information on configuring the encoding mode in Python, see [Configuring TrustMark](CONFIG.md). 
+For more details and information on configuring the encoding mode in Python, see [Configuring TrustMark](python/CONFIG.md). 
 
 ## Citation
 
-If you find this work useful, please give us a star ⭐ and cite the repository and/or TrustMark paper as follows:
-
+If you find this work useful, please give us a star ⭐ and cite the repository and/or TrustMark paper, preferrably as follows:
 ```
-@article{trustmark,
+@inproceedings{Trustmark-ICCV-2025,
+  title = {TrustMark: Robust Watermarking and Watermark Removal for Arbitrary Resolution Images},
+  author={Bui, Tu and Agarwal, Shruti and Collomosse, John},
+  booktitle = {IEEE International Conference on Computer Vision (ICCV)},
+  year = {2025},
+  month = oct
+}
+```
+or cite the earlier ArXiv version:
+```
+@article{Trustmark-ArXiv-2023,
 title={Trustmark: Universal Watermarking for Arbitrary Resolution Images},
 author={Bui, Tu and Agarwal, Shruti and Collomosse, John},
 journal = {ArXiv e-prints},
