@@ -42,7 +42,8 @@ class TrustMark_Arch(pl.LightningModule):
                  noise_config='__none__',
                  ckpt_path="__none__",
                  lr_scheduler='__none__',
-                 use_ema=False
+                 use_ema=False,
+                 yolo_config=None
                  ):
         super().__init__()
         self.automatic_optimization = False
@@ -56,6 +57,10 @@ class TrustMark_Arch(pl.LightningModule):
         self.decoder = instantiate_from_config(secret_decoder_config)
         self.loss_layer = instantiate_from_config(loss_config)
         self.discriminator = instantiate_from_config(discriminator_config)
+        if yolo_config is not None:
+            self.yolo = instantiate_from_config(yolo_config)
+            self.yolo.eval()
+            self.yolo.requires_grad_(False)
 
         if noise_config != '__none__':
             self.noise = instantiate_from_config(noise_config)
@@ -79,7 +84,6 @@ class TrustMark_Arch(pl.LightningModule):
         self.register_buffer("fixed_input", torch.tensor(True))
         self.register_buffer("update_gen", torch.tensor(False))  # update generator to fool discriminator
         self.bit_acc_thresholds = bit_acc_thresholds
-        self.crop = Identity()
     
     def init_from_ckpt(self, path, ignore_keys=list()):
         sd = torch.load(path, map_location="cpu")["state_dict"]

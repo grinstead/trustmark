@@ -234,12 +234,13 @@ pub(super) fn remove_boundary_artifact(
 
     // We want one dimension of the output to be 256 and we we want the aspect ratio of the output
     // to match the input image.
+    let other_dim;
     let mut mean_padded: ndarray::Array4<f32> = if width > height {
-        let other = ((width as f32 / height as f32) * 256.0) as usize;
-        ndarray::Array4::zeros([1, 3, 256_usize, other])
+        other_dim = ((width as f32 / height as f32) * 256.0) as usize;
+        ndarray::Array4::zeros([1, 3, 256_usize, other_dim])
     } else {
-        let other = (height / width) * 256;
-        ndarray::Array4::zeros([1, 3, other, 256])
+        other_dim = ((height as f32 / width as f32) * 256.0) as usize;
+        ndarray::Array4::zeros([1, 3, other_dim, 256])
     };
 
     // This softens the transition between the residual area and the rest of the image.
@@ -253,14 +254,12 @@ pub(super) fn remove_boundary_artifact(
     }
 
     if width > height {
-        let other = ((width as f32 / height as f32) * 256.0) as usize;
-        let leftover = (other - 256) / 2;
+        let leftover = (other_dim - 256) / 2;
         mean_padded
             .slice_mut(s![.., .., .., leftover..(leftover + 256)])
             .assign(&residual);
     } else {
-        let other = ((height as f32 / width as f32) * 256.0) as usize;
-        let leftover = (other - 256) / 2;
+        let leftover = (other_dim - 256) / 2;
         mean_padded
             .slice_mut(s![.., .., leftover..(leftover + 256), ..])
             .assign(&residual);
@@ -271,6 +270,8 @@ pub(super) fn remove_boundary_artifact(
 
 #[cfg(test)]
 mod tests {
+    use ndarray::Array4;
+
     use super::*;
 
     #[test]
@@ -321,5 +322,16 @@ mod tests {
             center_crop_size_and_offset(Variant::P, &image),
             (100, 100, 0, 5)
         );
+    }
+
+    #[test]
+    fn remove_boundary_artifact_tall() {
+        let residual: Array4<f32> = Array4::ones([1, 3, 256, 256]);
+        let width = 256;
+        let height = 298;
+
+        let output = remove_boundary_artifact(residual.into_dyn(), (width, height), Variant::P);
+
+        assert_eq!(output.shape(), &[1, 3, 298, 256]);
     }
 }

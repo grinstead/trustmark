@@ -1,7 +1,7 @@
 [package]
 name = "trustmark"
 description = "A Rust implementation of TrustMark"
-version = "0.2.1"
+version = "0.2.2"
 authors = [
   "John Collomosse <collomos@adobe.com>",
   "Maurice Fisher <mfisher@adobe.com>",
