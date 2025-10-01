@@ -125,7 +125,7 @@ class TrustMark():
         self.decoder = self.load_model(locations['config'], locations['decoder'], self.device, secret_len, part='decoder')
         self.encoder = self.load_model(locations['config'], locations['encoder'], self.device, secret_len, part='encoder')
         self.removal = None
-        self.loadBBoxDetector = None
+        self.detector = None
         if loadRemover:
           self.removal = self.load_model(locations['config-rm'], locations['remover'], self.device, secret_len, part='remover')
         if loadBBoxDetector:
@@ -398,35 +398,54 @@ class TrustMark():
 
 
     @torch.no_grad()
-    def decode(self, in_stego_image, MODE='text', DETECTFIRST=False):
+    def decode(self, in_stego_image, MODE='text', DETECTFIRST=False, ROTATION=False):
         # Inputs
         # stego_image: PIL image
         # Outputs: secret numpy array (1, secret_len)
-        if DETECTFIRST:
-           # run localization to get most likely box(es)
-           boxes_pred = self.localize(in_stego_image, return_all=True)
-           if boxes_pred is None:
-               return '', False, -1
-           for bbox in boxes_pred:
-              # bbox is normalized [x1, y1, x2, y2]
-              w, h = in_stego_image.size
-              x1 = int(bbox[0] * w)
-              y1 = int(bbox[1] * h)
-              x2 = int(bbox[2] * w)
-              y2 = int(bbox[3] * h)
-              x1 = max(0, min(x1, w - 1))
-              y1 = max(0, min(y1, h - 1))
-              x2 = max(x1 + 1, min(x2, w))
-              y2 = max(y1 + 1, min(y2, h))
-              stego_image = in_stego_image.crop((x1, y1, x2, y2))     
-              secret_pred, detected, version = self.subimage_decode(stego_image,MODE)
-              if detected:
-                return secret_pred, detected, version
-           # no boxes resulted in detection
-           return '', False, -1
+
+        if ROTATION:
+           angleset = [0, 90, 180, 270]
         else:
-           stego_image = self.get_the_image_for_processing(in_stego_image)
-           return self.subimage_decode(stego_image,MODE)
+           angleset = [0]
+
+        for angle in angleset:
+            if angle == 0:
+                rotated_cover = in_stego_image #rgbcover.rotate(angle) 
+            elif angle == 90:  
+                rotated_cover = in_stego_image.transpose(Image.ROTATE_90) #rgbcover.rotate(angle)
+            elif angle == 180:
+                rotated_cover = in_stego_image.transpose(Image.ROTATE_180) #rgbcover.rotate(angle)
+            elif angle == 270:
+                rotated_cover = in_stego_image.transpose(Image.ROTATE_270) #rgbcover.rotate(angle)
+
+            if DETECTFIRST and self.detector is not None:
+               # run localization to get most likely box(es)
+               boxes_pred = self.localize(rotated_cover, return_all=True)
+               if boxes_pred is None:
+                    return '', False, -1
+               for bbox in boxes_pred:
+                    # bbox is normalized [x1, y1, x2, y2]
+                    w, h = rotated_cover
+                    x1 = int(bbox[0] * w)
+                    y1 = int(bbox[1] * h)
+                    x2 = int(bbox[2] * w)
+                    y2 = int(bbox[3] * h)
+                    x1 = max(0, min(x1, w - 1))
+                    y1 = max(0, min(y1, h - 1))
+                    x2 = max(x1 + 1, min(x2, w))
+                    y2 = max(y1 + 1, min(y2, h))
+                    stego_image = rotated_cover.crop((x1, y1, x2, y2))     
+                    secret_pred, detected, version = self.subimage_decode(stego_image,MODE)
+                    if detected:
+                        return secret_pred, detected, version
+            else:
+                stego_image = self.get_the_image_for_processing(rotated_cover)
+                secret_pred, detected, version = self.subimage_decode(stego_image,MODE)
+                if detected:
+                    return secret_pred, detected, version
+           
+        # after optional rotation lopp no boxes resulted in detection
+        return '', False, -1
 
     @torch.no_grad()
     def subimage_decode(self, stego_image, MODE):

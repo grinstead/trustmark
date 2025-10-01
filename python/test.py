@@ -19,7 +19,7 @@ EXAMPLE_FILE = '../images/ripley.jpg'     # JPEG example
 
 # Available modes: Q=balance, P=high visual quality, C=compact decoder, B=base from paper
 MODE='P'
-DETECTFIRST=False  # True = decode full image watermark, True = detect watermarked region before decoding
+DETECTFIRST=False  # False = decode full image watermark, True = detect watermarked region before decoding
 tm=TrustMark(verbose=True, model_type=MODE, encoding_type=TrustMark.Encoding.BCH_5,  loadBBoxDetector=DETECTFIRST)
 
 # encoding example
@@ -39,9 +39,10 @@ if (has_alpha):
 outfile=Path(EXAMPLE_FILE).stem+'_'+MODE+'.png'
 encoded.save(outfile, exif=cover.info.get('exif'), icc_profile=cover.info.get('icc_profile'), dpi=cover.info.get('dpi'))
 
+
 # decoding example
 stego = Image.open(outfile).convert('RGB')
-wm_secret, wm_present, wm_schema = tm.decode(stego, MODE='binary', DETECTFIRST=DETECTFIRST)
+wm_secret, wm_present, wm_schema = tm.decode(stego, MODE='binary', DETECTFIRST=DETECTFIRST, ROTATION=False)
 if wm_present:
   print(f'Extracted secret: {wm_secret} (schema {wm_schema})')
 else:
@@ -61,9 +62,9 @@ has_alpha=stego.mode== 'RGBA'
 if (has_alpha):
   alpha=stego.split()[-1]
 im_recover = tm.remove_watermark(rgb)
-wm_secret, wm_present, wm_schema = tm.decode(im_recover, MODE='binary', DETECTFIRST=DETECTFIRST)
-if wm_present:
-  print(f'Extracted secret: {wm_secret} (schema {wm_schema})')
+rm_wm_secret, rm_wm_present, rm_wm_schema = tm.decode(im_recover, MODE='binary', DETECTFIRST=DETECTFIRST)
+if rm_wm_present and rm_wm_schema==wm_schema:
+  print(f'Extracted secret: {rm_wm_secret} (schema {rm_wm_schema})')
 else:
    print('No secret after removal')
 if (has_alpha):
