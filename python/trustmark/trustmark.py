@@ -26,7 +26,7 @@ from hashlib import md5
 from mmap import mmap, ACCESS_READ
 
 # Content Autenticity Initiative (CAI) Content Delivery Network
-MODEL_REMOTE_HOST = "https://cc-assets.netlify.app/watermarking/trustmark-models/"
+MODEL_REMOTE_HOST = "https://cai-watermark.adobe.net/watermarking/trustmark-models/"
 
 MODEL_CHECKSUMS=dict()
 
