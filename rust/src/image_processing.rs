@@ -9,9 +9,8 @@ use std::cmp;
 
 use fast_image_resize::{ResizeAlg, ResizeOptions, Resizer};
 use image::{
-    imageops::{self, FilterType},
-    DynamicImage, GenericImageView as _, GrayAlphaImage, GrayImage, ImageBuffer, Pixel as _,
-    Rgb32FImage, RgbImage, Rgba32FImage, RgbaImage,
+    imageops::FilterType, DynamicImage, GenericImageView as _, GrayAlphaImage, GrayImage,
+    ImageBuffer, Rgb32FImage, RgbImage, Rgba32FImage, RgbaImage,
 };
 use ndarray::{s, Array, ArrayD, Axis, ShapeError};
 use ort::TensorValueType;
@@ -112,47 +111,192 @@ impl TryFrom<(u32, Variant, ArrayD<f32>)> for ModelImage {
     }
 }
 
-/// Apply `residual` to the `input`.
+/// Apply `residual` to the `input` in place.
 ///
-/// This function upscales `residual` to be the size of of `input`, then adds `residual` to the
-/// `input`.
-pub(super) fn apply_residual(input: DynamicImage, residual: DynamicImage) -> DynamicImage {
-    let has_alpha = input.color().has_alpha();
+/// This function computes each required residual pixel on demand by bilinearly interpolating from
+/// the source residual image, avoiding the allocation of a full-size upscaled residual.
+pub(super) fn apply_residual_in_place(input: &mut DynamicImage, residual: DynamicImage) {
     let (w, h) = input.dimensions();
-
-    let applied = {
-        let input = input.clone().into_rgba32f();
-        let mut target = input.clone();
-
-        let residual = residual.resize_exact(w, h, FilterType::Triangle);
-        let residual = residual.into_rgba32f();
-
-        for ((target, residual), original) in target
-            .pixels_mut()
-            .zip(residual.pixels())
-            .zip(input.pixels())
-        {
-            target.apply2(residual, |x, y| {
-                let x = convert_from_0_1_to_neg1_1!(x);
-                let y = convert_from_0_1_to_neg1_1!(y);
-
-                convert_from_neg1_1_to_0_1!(f32::min(x + y, 1.0))
+    let residual_rgba = residual.into_rgba32f();
+    match input {
+        DynamicImage::ImageRgba32F(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                for c in 0..3 {
+                    let base = convert_from_0_1_to_neg1_1!(target_pixel[c]);
+                    target_pixel[c] =
+                        convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[c], 1.0));
+                }
             });
-            target[3] = original[3];
         }
+        DynamicImage::ImageRgb32F(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                for c in 0..3 {
+                    let base = convert_from_0_1_to_neg1_1!(target_pixel[c]);
+                    target_pixel[c] =
+                        convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[c], 1.0));
+                }
+            });
+        }
+        DynamicImage::ImageLuma8(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                let base = convert_from_0_1_to_neg1_1!(target_pixel[0] as f32 / u8::MAX as f32);
+                let output = convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[0], 1.0));
+                target_pixel[0] = (output * u8::MAX as f32) as u8;
+            });
+        }
+        DynamicImage::ImageLumaA8(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                let base = convert_from_0_1_to_neg1_1!(target_pixel[0] as f32 / u8::MAX as f32);
+                let output = convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[0], 1.0));
+                target_pixel[0] = (output * u8::MAX as f32) as u8;
+            });
+        }
+        DynamicImage::ImageRgb8(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                for c in 0..3 {
+                    let base = convert_from_0_1_to_neg1_1!(target_pixel[c] as f32 / u8::MAX as f32);
+                    let output =
+                        convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[c], 1.0));
+                    target_pixel[c] = (output * u8::MAX as f32) as u8;
+                }
+            });
+        }
+        DynamicImage::ImageRgba8(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                for c in 0..3 {
+                    let base = convert_from_0_1_to_neg1_1!(target_pixel[c] as f32 / u8::MAX as f32);
+                    let output =
+                        convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[c], 1.0));
+                    target_pixel[c] = (output * u8::MAX as f32) as u8;
+                }
+            });
+        }
+        DynamicImage::ImageLuma16(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                let base = convert_from_0_1_to_neg1_1!(target_pixel[0] as f32 / u16::MAX as f32);
+                let output = convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[0], 1.0));
+                target_pixel[0] = (output * u16::MAX as f32) as u16;
+            });
+        }
+        DynamicImage::ImageLumaA16(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                let base = convert_from_0_1_to_neg1_1!(target_pixel[0] as f32 / u16::MAX as f32);
+                let output = convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[0], 1.0));
+                target_pixel[0] = (output * u16::MAX as f32) as u16;
+            });
+        }
+        DynamicImage::ImageRgb16(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                for c in 0..3 {
+                    let base =
+                        convert_from_0_1_to_neg1_1!(target_pixel[c] as f32 / u16::MAX as f32);
+                    let output =
+                        convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[c], 1.0));
+                    target_pixel[c] = (output * u16::MAX as f32) as u16;
+                }
+            });
+        }
+        DynamicImage::ImageRgba16(target) => {
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = target.get_pixel_mut(x, y);
+                for c in 0..3 {
+                    let base =
+                        convert_from_0_1_to_neg1_1!(target_pixel[c] as f32 / u16::MAX as f32);
+                    let output =
+                        convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[c], 1.0));
+                    target_pixel[c] = (output * u16::MAX as f32) as u16;
+                }
+            });
+        }
+        // DynamicImage is non-exhaustive; keep a forward-compatible fallback.
+        image => {
+            let mut rgba_target = image.to_rgba32f();
+            for_each_interpolated_residual(w, h, residual_rgba, |x, y, residual_pixel| {
+                let target_pixel = rgba_target.get_pixel_mut(x, y);
+                for c in 0..3 {
+                    let base = convert_from_0_1_to_neg1_1!(target_pixel[c]);
+                    target_pixel[c] =
+                        convert_from_neg1_1_to_0_1!(f32::min(base + residual_pixel[c], 1.0));
+                }
+            });
+            *image = DynamicImage::ImageRgba32F(rgba_target);
+        }
+    }
+}
 
-        target
-    };
+fn for_each_interpolated_residual<F>(
+    width: u32,
+    height: u32,
+    mut residual_rgba: Rgba32FImage,
+    mut apply_residual: F,
+) where
+    F: FnMut(u32, u32, [f32; 4]),
+{
+    let (rw, rh) = residual_rgba.dimensions();
+    if rw > width || rh > height {
+        let target_w = rw.min(width);
+        let target_h = rh.min(height);
+        residual_rgba = DynamicImage::ImageRgba32F(residual_rgba)
+            .resize_exact(target_w, target_h, FilterType::Triangle)
+            .into_rgba32f();
+    }
 
-    if has_alpha {
-        let mut input = input.into_rgba32f();
-        imageops::replace(&mut input, &applied, 0, 0);
-        input.into()
-    } else {
-        let mut input = input.into_rgb32f();
-        let applied = DynamicImage::ImageRgba32F(applied).into_rgb32f();
-        imageops::replace(&mut input, &applied, 0, 0);
-        input.into()
+    let (rw, rh) = residual_rgba.dimensions();
+    let x_scale = rw as f32 / width as f32;
+    let y_scale = rh as f32 / height as f32;
+    let src_x_start = (0.5 * x_scale) - 0.5;
+    let src_y_start = (0.5 * y_scale) - 0.5;
+
+    let mut cached_neighborhood: Option<(f32, f32)> = None;
+    let mut cached_pixels = [[0.0; 4]; 4];
+
+    let mut src_y = src_y_start;
+    for y in 0..height {
+        let src_y_clamped = src_y.clamp(0.0, (rh - 1) as f32);
+        let mut src_x = src_x_start;
+        for x in 0..width {
+            let src_x_clamped = src_x.clamp(0.0, (rw - 1) as f32);
+            let x0f = src_x_clamped.floor();
+            let y0f = src_y_clamped.floor();
+            let wx = src_x_clamped - x0f;
+            let wy = src_y_clamped - y0f;
+
+            let neighborhood = (x0f, y0f);
+            if cached_neighborhood != Some(neighborhood) {
+                cached_neighborhood = Some(neighborhood);
+                let x0 = x0f as u32;
+                let y0 = y0f as u32;
+                let x1 = (x0 + 1).min(rw - 1);
+                let y1 = (y0 + 1).min(rh - 1);
+                cached_pixels[0] = residual_rgba.get_pixel(x0, y0).0;
+                cached_pixels[1] = residual_rgba.get_pixel(x1, y0).0;
+                cached_pixels[2] = residual_rgba.get_pixel(x0, y1).0;
+                cached_pixels[3] = residual_rgba.get_pixel(x1, y1).0;
+            }
+
+            let mut interpolated = [0.0; 4];
+            for channel in 0..4 {
+                let top =
+                    (cached_pixels[0][channel] * (1.0 - wx)) + (cached_pixels[1][channel] * wx);
+                let bottom =
+                    (cached_pixels[2][channel] * (1.0 - wx)) + (cached_pixels[3][channel] * wx);
+                interpolated[channel] =
+                    convert_from_0_1_to_neg1_1!((top * (1.0 - wy)) + (bottom * wy));
+            }
+
+            apply_residual(x, y, interpolated);
+            src_x += x_scale;
+        }
+        src_y += y_scale;
     }
 }
 
@@ -270,6 +414,7 @@ pub(super) fn remove_boundary_artifact(
 
 #[cfg(test)]
 mod tests {
+    use image::{imageops, Pixel as _};
     use ndarray::Array4;
 
     use super::*;
@@ -333,5 +478,154 @@ mod tests {
         let output = remove_boundary_artifact(residual.into_dyn(), (width, height), Variant::P);
 
         assert_eq!(output.shape(), &[1, 3, 298, 256]);
+    }
+
+    fn apply_residual_reference(input: DynamicImage, residual: DynamicImage) -> DynamicImage {
+        let has_alpha = input.color().has_alpha();
+        let (w, h) = input.dimensions();
+
+        let applied = {
+            let input = input.clone().into_rgba32f();
+            let mut target = input.clone();
+
+            let residual = residual.resize_exact(w, h, FilterType::Triangle);
+            let residual = residual.into_rgba32f();
+
+            for ((target, residual), original) in target
+                .pixels_mut()
+                .zip(residual.pixels())
+                .zip(input.pixels())
+            {
+                target.apply2(residual, |x, y| {
+                    let x = convert_from_0_1_to_neg1_1!(x);
+                    let y = convert_from_0_1_to_neg1_1!(y);
+
+                    convert_from_neg1_1_to_0_1!(f32::min(x + y, 1.0))
+                });
+                target[3] = original[3];
+            }
+
+            target
+        };
+
+        if has_alpha {
+            let mut input = input.into_rgba32f();
+            imageops::replace(&mut input, &applied, 0, 0);
+            input.into()
+        } else {
+            let mut input = input.into_rgb32f();
+            let applied = DynamicImage::ImageRgba32F(applied).into_rgb32f();
+            imageops::replace(&mut input, &applied, 0, 0);
+            input.into()
+        }
+    }
+
+    fn apply_residual_reference_with_min_resize(
+        input: DynamicImage,
+        residual: DynamicImage,
+    ) -> DynamicImage {
+        let (w, h) = input.dimensions();
+        let (rw, rh) = residual.dimensions();
+        let residual = if rw > w || rh > h {
+            residual.resize_exact(rw.min(w), rh.min(h), FilterType::Triangle)
+        } else {
+            residual
+        };
+        apply_residual_reference(input, residual)
+    }
+
+    #[test]
+    fn apply_residual_in_place_matches_reference() {
+        let mut input = Rgba32FImage::new(23, 17);
+        for (x, y, pixel) in input.enumerate_pixels_mut() {
+            let xf = x as f32 / 23.0;
+            let yf = y as f32 / 17.0;
+            *pixel = image::Rgba([xf, yf, (xf + yf) / 2.0, 1.0 - (xf * yf * 0.5)]);
+        }
+        let input = DynamicImage::ImageRgba32F(input);
+
+        let mut residual = Rgb32FImage::new(11, 9);
+        for (x, y, pixel) in residual.enumerate_pixels_mut() {
+            let xf = x as f32 / 11.0;
+            let yf = y as f32 / 9.0;
+            *pixel = image::Rgb([0.2 + (xf * 0.4), 0.3 + (yf * 0.2), 0.1 + ((xf + yf) * 0.2)]);
+        }
+        let residual = DynamicImage::ImageRgb32F(residual);
+
+        let expected = apply_residual_reference(input.clone(), residual.clone()).into_rgba32f();
+
+        let mut actual_in_place = input.clone();
+        apply_residual_in_place(&mut actual_in_place, residual);
+        let actual_in_place = actual_in_place.into_rgba32f();
+
+        for (actual, expected) in actual_in_place.pixels().zip(expected.pixels()) {
+            for c in 0..4 {
+                assert!((actual[c] - expected[c]).abs() <= f32::EPSILON);
+            }
+        }
+    }
+
+    #[test]
+    fn apply_residual_in_place_matches_reference_with_larger_residual() {
+        let mut input = Rgba32FImage::new(23, 17);
+        for (x, y, pixel) in input.enumerate_pixels_mut() {
+            let xf = x as f32 / 23.0;
+            let yf = y as f32 / 17.0;
+            *pixel = image::Rgba([xf, yf, (xf + yf) / 2.0, 1.0 - (xf * yf * 0.5)]);
+        }
+        let input = DynamicImage::ImageRgba32F(input);
+
+        let mut residual = Rgb32FImage::new(47, 31);
+        for (x, y, pixel) in residual.enumerate_pixels_mut() {
+            let xf = x as f32 / 47.0;
+            let yf = y as f32 / 31.0;
+            *pixel = image::Rgb([0.2 + (xf * 0.4), 0.3 + (yf * 0.2), 0.1 + ((xf + yf) * 0.2)]);
+        }
+        let residual = DynamicImage::ImageRgb32F(residual);
+
+        let expected = apply_residual_reference(input.clone(), residual.clone()).into_rgba32f();
+
+        let mut actual_in_place = input.clone();
+        apply_residual_in_place(&mut actual_in_place, residual);
+        let actual_in_place = actual_in_place.into_rgba32f();
+
+        for (actual, expected) in actual_in_place.pixels().zip(expected.pixels()) {
+            for c in 0..4 {
+                assert!((actual[c] - expected[c]).abs() <= f32::EPSILON);
+            }
+        }
+    }
+
+    #[test]
+    fn apply_residual_in_place_matches_reference_with_mixed_residual_dims() {
+        let mut input = Rgba32FImage::new(23, 17);
+        for (x, y, pixel) in input.enumerate_pixels_mut() {
+            let xf = x as f32 / 23.0;
+            let yf = y as f32 / 17.0;
+            *pixel = image::Rgba([xf, yf, (xf + yf) / 2.0, 1.0 - (xf * yf * 0.5)]);
+        }
+        let input = DynamicImage::ImageRgba32F(input);
+
+        // Wider than input, but shorter than input.
+        let mut residual = Rgb32FImage::new(47, 11);
+        for (x, y, pixel) in residual.enumerate_pixels_mut() {
+            let xf = x as f32 / 47.0;
+            let yf = y as f32 / 11.0;
+            *pixel = image::Rgb([0.2 + (xf * 0.4), 0.3 + (yf * 0.2), 0.1 + ((xf + yf) * 0.2)]);
+        }
+        let residual = DynamicImage::ImageRgb32F(residual);
+
+        let expected = apply_residual_reference_with_min_resize(input.clone(), residual.clone())
+            .into_rgba32f();
+
+        let mut actual_in_place = input.clone();
+        apply_residual_in_place(&mut actual_in_place, residual);
+        let actual_in_place = actual_in_place.into_rgba32f();
+
+        for (actual, expected) in actual_in_place.pixels().zip(expected.pixels()) {
+            for c in 0..4 {
+                assert!((actual[c] - expected[c]).abs() <= f32::EPSILON);
+            }
+        }
     }
 }

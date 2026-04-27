@@ -115,11 +115,11 @@ fn main() {
             quality,
             ..
         } => {
-            let input = image::open(input).unwrap();
+            let mut input = image::open(input).unwrap();
             let watermark = watermark.unwrap_or_else(|| {
                 gen_watermark(version.unwrap_or(Version::Bch5).data_bits().into())
             });
-            let encoded = tm.encode(watermark.clone(), input, 0.95).unwrap();
+            tm.encode_in_place(watermark, &mut input, 0.95).unwrap();
 
             let format = ImageFormat::from_path(&output).unwrap();
             match format {
@@ -134,10 +134,10 @@ fn main() {
                         .open(&output)
                         .unwrap();
                     let encoder = JpegEncoder::new_with_quality(&mut writer, quality);
-                    encoded.to_rgb8().write_with_encoder(encoder).unwrap();
+                    input.to_rgb8().write_with_encoder(encoder).unwrap();
                 }
                 _ => {
-                    encoded.to_rgba8().save(&output).unwrap();
+                    input.to_rgba8().save(&output).unwrap();
                 }
             }
         }

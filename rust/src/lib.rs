@@ -120,6 +120,26 @@ impl Trustmark {
         img: DynamicImage,
         strength: f32,
     ) -> Result<DynamicImage, Error> {
+        let mut output = if img.color().has_alpha() {
+            DynamicImage::ImageRgba32F(img.into_rgba32f())
+        } else {
+            DynamicImage::ImageRgb32F(img.into_rgb32f())
+        };
+        self.encode_in_place(watermark, &mut output, strength)?;
+        Ok(output)
+    }
+
+    /// Encode a watermark into an image in place.
+    ///
+    /// `watermark` is a bitstring encoding the watermark identifier to encode. `img` is the image
+    /// which will be watermarked and mutated in place. `strength` is a number between 0 and 1
+    /// indicating how strong the resulting watermark should be. 0.95 is a normal strength.
+    pub fn encode_in_place(
+        &self,
+        watermark: String,
+        img: &mut DynamicImage,
+        strength: f32,
+    ) -> Result<(), Error> {
         let (original_width, original_height) = img.dimensions();
         let aspect_ratio = original_width as f32 / original_height as f32;
 
@@ -156,7 +176,8 @@ impl Trustmark {
 
         let ModelImage(_, _, residual) = (encode_size, self.variant, residual).try_into()?;
 
-        Ok(image_processing::apply_residual(img, residual))
+        image_processing::apply_residual_in_place(img, residual);
+        Ok(())
     }
 
     /// Decode a watermark from an image.
